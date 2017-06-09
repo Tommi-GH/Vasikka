@@ -12,7 +12,7 @@ import (
 type slashResponse struct {
 	ResponseType string `json:"response_type"`
 	Text         string `json:"text"`
-	Username     string `json:"text"`
+	Attachments  []string	`json:"attachments"`
 }
 
 func init() {
@@ -33,7 +33,7 @@ func handleMessage(w http.ResponseWriter, r *http.Request){
 	resp := &slashResponse{
 		ResponseType: "in_channel",
 		Text:          "Kiitos "+r.PostFormValue("user_name")+ "! " + answers[rand.Intn(len(answers))],
-		Username:      r.PostFormValue("text"),
+		Attachments:   []string{"{"+r.PostFormValue("text")+"}"},
 	}
 
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
