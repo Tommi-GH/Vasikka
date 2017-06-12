@@ -71,8 +71,8 @@ func handleMessage(w http.ResponseWriter, r *http.Request) {
 	payload := strings.NewReader("{\"text\":\""+message+"\"}")
 	sendRequest(r,slackurl,"application/json",payload)
 
-	payload2 := strings.NewReader("entry.2059036820=Kokkavartio&entry.1364708498=Hyvin%20menee%20joo&entry.1911721708=Tommi%20T")
-	sendRequest(r,formurl,"application/x-www-form-urlencoded",payload2)
+	payload = strings.NewReader("entry.2059036820=Kokkavartio&entry.1364708498=Hyvin%20menee%20joo&entry.1911721708=Tommi%20T")
+	sendRequest(r,formurl,"application/x-www-form-urlencoded",payload)
 
 }
 
@@ -81,8 +81,10 @@ func sendRequest(r *http.Request, url string, contentType string, payload io.Rea
 	ctx := appengine.NewContext(r)
 	client := urlfetch.Client(ctx)
 
+	//client.Post(url, contentType, payload)
+
 	req, _ := http.NewRequest("POST", url, payload)
-	req.Header.Set("content-type", contentType)
+	req.Header.Set("Content-Type", contentType)
 	log.Debugf(ctx,"%s",formatRequest(req))
 	resp2, err2 := client.Do(req)
 
