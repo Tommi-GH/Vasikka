@@ -1,2 +1,2 @@
 # Vasikka
-Slack bot Vasikka
+Slackbot Vasikka
