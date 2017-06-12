@@ -41,19 +41,21 @@ func handleMessage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	c := appengine.NewContext(r)
-	log.Errorf(c, "Got token: %s", r.PostFormValue("token"))
 
 	w.Header().Set("content-type", "application/json")
 
+	sender := r.PostFormValue("user_name")
+	message := strings.Replace(r.PostFormValue("text"),`"`,"´´",-1)
+
 	att := &attachments{
-		Text: r.PostFormValue("text"),
+		Text: message,
 	}
 
 	var attJson = att
 
 	resp := &slashResponse{
 		ResponseType: "ephemeral",
-		Text:         "Kiitos " + r.PostFormValue("user_name") + "! " + answers[rand.Intn(len(answers))],
+		Text:         "Kiitos " + sender + "! " + answers[rand.Intn(len(answers))],
 		Attachments:  []*attachments{attJson, },
 	}
 
@@ -65,7 +67,8 @@ func handleMessage(w http.ResponseWriter, r *http.Request) {
 
 	print(json.NewEncoder(w).Encode(resp))
 
-	payload := strings.NewReader("{\"text\":\""+r.PostFormValue("text")+"\"}")
+
+	payload := strings.NewReader("{\"text\":\""+message+"\"}")
 	sendRequest(r,slackurl,"application/json",payload)
 
 	payload2 := strings.NewReader("entry.2059036820=Kokkavartio&entry.1364708498=Hyvin%20menee%20joo&entry.1911721708=Tommi%20T")
@@ -79,7 +82,7 @@ func sendRequest(r *http.Request, url string, contentType string, payload io.Rea
 	client := urlfetch.Client(ctx)
 
 	req, _ := http.NewRequest("POST", url, payload)
-	req.Header.Add("content-type", contentType)
+	req.Header.Set("content-type", contentType)
 	log.Debugf(ctx,"%s",formatRequest(req))
 	resp2, err2 := client.Do(req)
 
