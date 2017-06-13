@@ -2,25 +2,25 @@ package listener
 
 import (
 	"encoding/json"
+	"io"
 	"math/rand"
 	"net/http"
+
+	"fmt"
+	"strings"
 
 	"google.golang.org/appengine"
 	"google.golang.org/appengine/log"
 	"google.golang.org/appengine/urlfetch"
-	"strings"
-	"io"
-	"fmt"
-	
 )
 
 type attachments struct {
-	Text         string `json:"text"`
+	Text string `json:"text"`
 }
 
 type slashResponse struct {
-	ResponseType string `json:"response_type"`
-	Text         string `json:"text"`
+	ResponseType string         `json:"response_type"`
+	Text         string         `json:"text"`
 	Attachments  []*attachments `json:"attachments"`
 }
 
@@ -30,7 +30,7 @@ func init() {
 
 func handleMessage(w http.ResponseWriter, r *http.Request) {
 
-	var token= tokentest
+	var token = tokentest
 
 	if !appengine.IsDevAppServer() {
 		token = tokenprod
@@ -46,18 +46,18 @@ func handleMessage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("content-type", "application/json")
 
 	sender := r.PostFormValue("user_name")
-	message := strings.Replace(r.PostFormValue("text"),`"`,"´´",-1)
+	message := strings.Replace(r.PostFormValue("text"), `"`, "´´", -1)
 
 	att := &attachments{
 		Text: message,
 	}
 
-	var attJson = att
+	var attJSON = att
 
 	resp := &slashResponse{
 		ResponseType: "ephemeral",
 		Text:         "Kiitos " + sender + "! " + answers[rand.Intn(len(answers))],
-		Attachments:  []*attachments{attJson, },
+		Attachments:  []*attachments{attJSON},
 	}
 
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
@@ -68,16 +68,15 @@ func handleMessage(w http.ResponseWriter, r *http.Request) {
 
 	print(json.NewEncoder(w).Encode(resp))
 
-
-	payload := strings.NewReader("{\"text\":\""+message+"\"}")
-	sendRequest(r,slackurl,"application/json",payload)
+	payload := strings.NewReader("{\"text\":\"" + message + "\"}")
+	sendRequest(r, slackurl, "application/json", payload)
 
 	payload = strings.NewReader("entry.2059036820=Kokkavartio&entry.1364708498=Hyvin%20menee%20joo&entry.1911721708=Tommi%20T")
-	sendRequest(r,formurl,"application/x-www-form-urlencoded",payload)
+	sendRequest(r, formurl, "application/x-www-form-urlencoded", payload)
 
 }
 
-func sendRequest(r *http.Request, url string, contentType string, payload io.Reader){
+func sendRequest(r *http.Request, url string, contentType string, payload io.Reader) {
 
 	ctx := appengine.NewContext(r)
 	client := urlfetch.Client(ctx)
@@ -86,11 +85,11 @@ func sendRequest(r *http.Request, url string, contentType string, payload io.Rea
 
 	req, _ := http.NewRequest("POST", url, payload)
 	req.Header.Set("Content-Type", contentType)
-	log.Debugf(ctx,"%s",formatRequest(req))
+	log.Debugf(ctx, "%s", formatRequest(req))
 	resp2, err2 := client.Do(req)
 
-	log.Debugf(ctx,"%s",resp2)
-	log.Errorf(ctx,"%s",err2)
+	log.Debugf(ctx, "%s", resp2)
+	log.Errorf(ctx, "%s", err2)
 	defer resp2.Body.Close()
 
 }
@@ -117,9 +116,9 @@ func formatRequest(r *http.Request) string {
 
 	// If this is a POST, add post data
 	if r.Method == "POST" {
-	r.ParseForm()
-	request = append(request, "\n")
-	request = append(request, r.Form.Encode())
+		r.ParseForm()
+		request = append(request, "\n")
+		request = append(request, r.Form.Encode())
 	}
 
 	// Return the request as a string
