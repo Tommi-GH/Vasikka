@@ -6,9 +6,13 @@ import (
 	"math/rand"
 	"net/http"
 
+	"golang.org/x/oauth2/google"
+
 	"fmt"
 	"strings"
 
+	compute "google.golang.org/api/compute/v1"
+	sheets "google.golang.org/api/sheets/v4"
 	"google.golang.org/appengine"
 	"google.golang.org/appengine/log"
 	"google.golang.org/appengine/urlfetch"
@@ -68,11 +72,13 @@ func handleMessage(w http.ResponseWriter, r *http.Request) {
 
 	print(json.NewEncoder(w).Encode(resp))
 
-	payload := strings.NewReader("{\"text\":\"" + message + "\"}")
-	sendRequest(r, slackurl, "application/json", payload)
+	//payload := strings.NewReader("{\"text\":\"" + message + "\"}")
+	//sendRequest(r, slackurl, "application/json", payload)
 
-	payload = strings.NewReader("entry.2059036820=Kokkavartio&entry.1364708498=Hyvin%20menee%20joo&entry.1911721708=Tommi%20T")
-	sendRequest(r, formurl, "application/x-www-form-urlencoded", payload)
+	//payload = strings.NewReader("entry.2059036820=Kokkavartio&entry.1364708498=Hyvin%20menee%20joo&entry.1911721708=Tommi%20T")
+	//sendRequest(r, formurl, "application/x-www-form-urlencoded", payload)
+
+	saveDataToSheets(r)
 
 }
 
@@ -123,4 +129,30 @@ func formatRequest(r *http.Request) string {
 
 	// Return the request as a string
 	return strings.Join(request, "\n")
+}
+
+func saveDataToSheets(r *http.Request) {
+
+	ctx := appengine.NewContext(r)
+	client, err := google.DefaultClient(ctx, compute.ComputeScope)
+	if err != nil {
+		log.Errorf(ctx, "Unable to create client %s", err)
+	}
+
+	srv, err := sheets.New(client)
+	if err != nil {
+		log.Errorf(ctx, "Unable to retrieve Sheets Client %v", err)
+	}
+
+	readRange := "Class Data!A1:B2"
+	resp, err := srv.Spreadsheets.Values.Get(spreadsheetID, readRange).Do()
+	if err != nil {
+		log.Errorf(ctx, "Unable to retrieve data from sheet. %v", err)
+	}
+
+	if len(resp.Values) > 0 {
+
+		log.Debugf(ctx, "Onnistui")
+	}
+
 }
