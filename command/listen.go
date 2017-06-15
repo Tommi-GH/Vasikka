@@ -3,8 +3,10 @@ package listener
 import (
 	"encoding/json"
 	"io"
+	"io/ioutil"
 	"math/rand"
 	"net/http"
+	"time"
 
 	"golang.org/x/oauth2/google"
 
@@ -72,30 +74,32 @@ func handleMessage(w http.ResponseWriter, r *http.Request) {
 
 	print(json.NewEncoder(w).Encode(resp))
 
-	//payload := strings.NewReader("{\"text\":\"" + message + "\"}")
-	//sendRequest(r, slackurl, "application/json", payload)
+	payload := strings.NewReader("{\"text\":\"" + message + "\"}")
+	sendRequest(r, slackurl, "application/json", payload)
 
 	//payload = strings.NewReader("entry.2059036820=Kokkavartio&entry.1364708498=Hyvin%20menee%20joo&entry.1911721708=Tommi%20T")
 	//sendRequest(r, formurl, "application/x-www-form-urlencoded", payload)
 
-	saveDataToSheets(r)
+	saveDataToSheets(r, sender, message)
 
 }
 
-func sendRequest(r *http.Request, url string, contentType string, payload io.Reader) {
+func sendRequest(r *http.Request, targeturl string, contentType string, payload io.Reader) {
 
 	ctx := appengine.NewContext(r)
 	client := urlfetch.Client(ctx)
 
 	//client.Post(url, contentType, payload)
 
-	req, _ := http.NewRequest("POST", url, payload)
+	req, _ := http.NewRequest("POST", targeturl, payload)
 	req.Header.Set("Content-Type", contentType)
 	log.Debugf(ctx, "%s", formatRequest(req))
 	resp2, err2 := client.Do(req)
 
-	log.Debugf(ctx, "%s", resp2)
-	log.Errorf(ctx, "%s", err2)
+	log.Debugf(ctx, "Vastaus: %s", resp2)
+	muuttuja, _ := ioutil.ReadAll(resp2.Body)
+	log.Errorf(ctx, string(muuttuja))
+	log.Errorf(ctx, "Virheviesti: %s", err2)
 	defer resp2.Body.Close()
 
 }
@@ -131,10 +135,10 @@ func formatRequest(r *http.Request) string {
 	return strings.Join(request, "\n")
 }
 
-func saveDataToSheets(r *http.Request) {
+func saveDataToSheets(r *http.Request, sender string, message string) {
 
 	ctx := appengine.NewContext(r)
-	client, err := google.DefaultClient(ctx, compute.ComputeScope)
+	client, err := google.DefaultClient(ctx, compute.ComputeScope, "https://www.googleapis.com/auth/spreadsheets")
 	if err != nil {
 		log.Errorf(ctx, "Unable to create client %s", err)
 	}
@@ -144,15 +148,17 @@ func saveDataToSheets(r *http.Request) {
 		log.Errorf(ctx, "Unable to retrieve Sheets Client %v", err)
 	}
 
-	readRange := "Class Data!A1:B2"
-	resp, err := srv.Spreadsheets.Values.Get(spreadsheetID, readRange).Do()
+	valueInputOption := "RAW"
+	var vr sheets.ValueRange
+
+	myval := []interface{}{time.Now(), message, sender}
+	vr.Values = append(vr.Values, myval)
+
+	writeRange := "Sheet1!A1"
+
+	_, err = srv.Spreadsheets.Values.Append(spreadsheetID, writeRange, &vr).ValueInputOption(valueInputOption).Context(ctx).Do()
 	if err != nil {
 		log.Errorf(ctx, "Unable to retrieve data from sheet. %v", err)
-	}
-
-	if len(resp.Values) > 0 {
-
-		log.Debugf(ctx, "Onnistui")
 	}
 
 }
