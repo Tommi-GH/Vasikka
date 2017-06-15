@@ -77,9 +77,6 @@ func handleMessage(w http.ResponseWriter, r *http.Request) {
 	payload := strings.NewReader("{\"text\":\"" + message + "\"}")
 	sendRequest(r, slackurl, "application/json", payload)
 
-	//payload = strings.NewReader("entry.2059036820=Kokkavartio&entry.1364708498=Hyvin%20menee%20joo&entry.1911721708=Tommi%20T")
-	//sendRequest(r, formurl, "application/x-www-form-urlencoded", payload)
-
 	saveDataToSheets(r, sender, message)
 
 }
@@ -88,8 +85,6 @@ func sendRequest(r *http.Request, targeturl string, contentType string, payload 
 
 	ctx := appengine.NewContext(r)
 	client := urlfetch.Client(ctx)
-
-	//client.Post(url, contentType, payload)
 
 	req, _ := http.NewRequest("POST", targeturl, payload)
 	req.Header.Set("Content-Type", contentType)
@@ -149,12 +144,11 @@ func saveDataToSheets(r *http.Request, sender string, message string) {
 	}
 
 	valueInputOption := "RAW"
+	writeRange := "Sheet1!A1"
 	var vr sheets.ValueRange
 
 	myval := []interface{}{time.Now(), message, sender}
 	vr.Values = append(vr.Values, myval)
-
-	writeRange := "Sheet1!A1"
 
 	_, err = srv.Spreadsheets.Values.Append(spreadsheetID, writeRange, &vr).ValueInputOption(valueInputOption).Context(ctx).Do()
 	if err != nil {
