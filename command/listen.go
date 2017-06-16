@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"strings"
 
-	compute "google.golang.org/api/compute/v1"
 	sheets "google.golang.org/api/sheets/v4"
 	"google.golang.org/appengine"
 	"google.golang.org/appengine/log"
@@ -59,11 +58,26 @@ func handleMessage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var attJSON = att
+	var resp = &slashResponse{}
 
-	resp := &slashResponse{
-		ResponseType: "ephemeral",
-		Text:         "Kiitos " + sender + "! " + answers[rand.Intn(len(answers))],
-		Attachments:  []*attachments{attJSON},
+	if saveDataToSheets(r, sender, message) == "" {
+		resp = &slashResponse{
+			ResponseType: "ephemeral",
+			Text:         "Kiitos " + sender + "! " + answers[rand.Intn(len(answers))],
+			Attachments:  []*attachments{attJSON},
+		}
+	} else if saveDataToSheets(r, sender, message) == "noTarget" {
+		resp = &slashResponse{
+			ResponseType: "ephemeral",
+			Text:         noTargetMessage,
+			Attachments:  []*attachments{attJSON},
+		}
+	} else {
+		resp = &slashResponse{
+			ResponseType: "ephemeral",
+			Text:         errorMessage,
+			Attachments:  []*attachments{attJSON},
+		}
 	}
 
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
@@ -76,8 +90,6 @@ func handleMessage(w http.ResponseWriter, r *http.Request) {
 
 	payload := strings.NewReader("{\"text\":\"" + message + "\"}")
 	sendRequest(r, slackurl, "application/json", payload)
-
-	saveDataToSheets(r, sender, message)
 
 }
 
@@ -130,29 +142,85 @@ func formatRequest(r *http.Request) string {
 	return strings.Join(request, "\n")
 }
 
-func saveDataToSheets(r *http.Request, sender string, message string) {
+func saveDataToSheets(r *http.Request, sender string, message string) string {
 
 	ctx := appengine.NewContext(r)
-	client, err := google.DefaultClient(ctx, compute.ComputeScope, "https://www.googleapis.com/auth/spreadsheets")
+	client, err := google.DefaultClient(ctx, "https://www.googleapis.com/auth/spreadsheets")
 	if err != nil {
 		log.Errorf(ctx, "Unable to create client %s", err)
+		return "Error"
 	}
 
 	srv, err := sheets.New(client)
 	if err != nil {
 		log.Errorf(ctx, "Unable to retrieve Sheets Client %v", err)
+		return "Error"
 	}
 
 	valueInputOption := "RAW"
 	writeRange := "Sheet1!A1"
 	var vr sheets.ValueRange
 
-	myval := []interface{}{time.Now(), message, sender}
-	vr.Values = append(vr.Values, myval)
+	targets, err := srv.Spreadsheets.Values.Get(targetSpreadsheetID, "Sheet1!A2:B").Context(ctx).Do()
 
-	_, err = srv.Spreadsheets.Values.Append(spreadsheetID, writeRange, &vr).ValueInputOption(valueInputOption).Context(ctx).Do()
 	if err != nil {
-		log.Errorf(ctx, "Unable to retrieve data from sheet. %v", err)
+		log.Errorf(ctx, "Unable to retrieve data from targetsheet. %v", err)
+		return "Error"
 	}
 
+	var target = parseTarget(message, targets)
+	if target == "" {
+		return "noTarget"
+	}
+
+	myval := []interface{}{time.Now(), target, message, sender}
+	vr.Values = append(vr.Values, myval)
+
+	_, err = srv.Spreadsheets.Values.Append(reportSpreadsheetID, writeRange, &vr).ValueInputOption(valueInputOption).Context(ctx).Do()
+	if err != nil {
+		log.Errorf(ctx, "Unable to retrieve data from reportsheet. %v", err)
+		return "Error"
+	}
+
+	return ""
+
+}
+
+func parseTarget(message string, lippukunnat *sheets.ValueRange) string {
+
+	if len(lippukunnat.Values) > 0 {
+
+		fullname := ""
+		shortname := ""
+		hasShortName := false
+		hasLongName := false
+
+		for _, row := range lippukunnat.Values {
+
+			fullname = row[0].(string)
+			if len(row) > 1 {
+				shortname = row[1].(string)
+			}
+
+			if len(fullname) > 1 {
+				hasLongName = strings.Contains(strings.ToLower(message), strings.ToLower(fullname))
+			}
+
+			if len(shortname) > 1 {
+				hasShortName = strings.Contains(strings.ToLower(message), strings.ToLower(shortname+" "))
+			}
+
+			if len(shortname) > 1 {
+				hasShortName = strings.Contains(strings.ToLower(message), strings.ToLower(" "+shortname))
+			}
+
+			if hasShortName || hasLongName {
+				return fullname
+			}
+			hasShortName = false
+			hasLongName = false
+		}
+	}
+
+	return ""
 }
