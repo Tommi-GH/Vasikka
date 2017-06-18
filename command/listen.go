@@ -2,15 +2,11 @@ package listener
 
 import (
 	"encoding/json"
-	"io"
-	"io/ioutil"
-	"math/rand"
 	"net/http"
 	"time"
 
 	"golang.org/x/oauth2/google"
 
-	"fmt"
 	"strings"
 
 	sheets "google.golang.org/api/sheets/v4"
@@ -33,12 +29,43 @@ func init() {
 	http.HandleFunc("/", handleMessage)
 }
 
+var token = ""
+var slackurl = ""
+var formurl = ""
+var targetSpreadsheetID = ""
+var reportSpreadsheetID = ""
+var errorMessage = ""
+var noTargetMessage = ""
+
 func handleMessage(w http.ResponseWriter, r *http.Request) {
 
-	var token = tokentest
+	if appengine.IsDevAppServer() {
+		token = tokentest
+		slackurl = ""
+		formurl = ""
+		targetSpreadsheetID = ""
+		reportSpreadsheetID = ""
+		errorMessage = ""
+		noTargetMessage = ""
 
-	if !appengine.IsDevAppServer() {
-		token = tokenprod
+	} else if r.PostFormValue("team_id") == team1ID {
+		token = team1token
+		slackurl = team1Slackurl
+		formurl = team1Formurl
+		targetSpreadsheetID = team1TargetSheetID
+		reportSpreadsheetID = team1ReportSheetID
+		errorMessage = team1ErrorMessage
+		noTargetMessage = team1NoTargetMessage
+
+	} else if r.PostFormValue("team_id") == team2ID {
+		token = team2token
+		slackurl = team2Slackurl
+		formurl = team2Formurl
+		targetSpreadsheetID = team2TargetSheetID
+		reportSpreadsheetID = team2ReportSheetID
+		team2ErrorMessage = ""
+		team2NoTargetMessage = ""
+
 	}
 
 	if token != "" && r.PostFormValue("token") != token {
@@ -63,7 +90,7 @@ func handleMessage(w http.ResponseWriter, r *http.Request) {
 	if saveDataToSheets(r, sender, message) == "" {
 		resp = &slashResponse{
 			ResponseType: "ephemeral",
-			Text:         "Kiitos " + sender + "! " + answers[rand.Intn(len(answers))],
+			Text:         "Kiitos " + sender + "! " + answer,
 			Attachments:  []*attachments{attJSON},
 		}
 	} else if saveDataToSheets(r, sender, message) == "noTarget" {
@@ -88,58 +115,22 @@ func handleMessage(w http.ResponseWriter, r *http.Request) {
 
 	print(json.NewEncoder(w).Encode(resp))
 
+	// Send Slack message to dedicated channel as bot user
 	payload := strings.NewReader("{\"text\":\"" + message + "\"}")
-	sendRequest(r, slackurl, "application/json", payload)
-
-}
-
-func sendRequest(r *http.Request, targeturl string, contentType string, payload io.Reader) {
 
 	ctx := appengine.NewContext(r)
 	client := urlfetch.Client(ctx)
+	req, _ := http.NewRequest("POST", slackurl, payload)
+	req.Header.Set("Content-Type", "application/json")
 
-	req, _ := http.NewRequest("POST", targeturl, payload)
-	req.Header.Set("Content-Type", contentType)
-	log.Debugf(ctx, "%s", formatRequest(req))
 	resp2, err2 := client.Do(req)
 
-	log.Debugf(ctx, "Vastaus: %s", resp2)
-	muuttuja, _ := ioutil.ReadAll(resp2.Body)
-	log.Errorf(ctx, string(muuttuja))
-	log.Errorf(ctx, "Virheviesti: %s", err2)
+	if err2 != nil {
+		log.Errorf(ctx, "Unable to send message as bot user: %s", err2)
+	}
+
 	defer resp2.Body.Close()
 
-}
-
-// formatRequest generates ascii representation of a request
-func formatRequest(r *http.Request) string {
-	// Create return string
-	var request []string
-
-	// Add the request string
-	url := fmt.Sprintf("%v %v %v", r.Method, r.URL, r.Proto)
-	request = append(request, url)
-
-	// Add the host
-	request = append(request, fmt.Sprintf("Host: %v", r.Host))
-
-	// Loop through headers
-	for name, headers := range r.Header {
-		name = strings.ToLower(name)
-		for _, h := range headers {
-			request = append(request, fmt.Sprintf("%v: %v", name, h))
-		}
-	}
-
-	// If this is a POST, add post data
-	if r.Method == "POST" {
-		r.ParseForm()
-		request = append(request, "\n")
-		request = append(request, r.Form.Encode())
-	}
-
-	// Return the request as a string
-	return strings.Join(request, "\n")
 }
 
 func saveDataToSheets(r *http.Request, sender string, message string) string {
@@ -168,7 +159,7 @@ func saveDataToSheets(r *http.Request, sender string, message string) string {
 		return "Error"
 	}
 
-	var target = parseTarget(message, targets)
+	var target = parseKeywords(message, targets)
 	if target == "" {
 		return "noTarget"
 	}
@@ -186,39 +177,37 @@ func saveDataToSheets(r *http.Request, sender string, message string) string {
 
 }
 
-func parseTarget(message string, lippukunnat *sheets.ValueRange) string {
+func parseKeywords(message string, keywords *sheets.ValueRange) string {
 
-	if len(lippukunnat.Values) > 0 {
+	if len(keywords.Values) > 0 {
 
 		fullname := ""
 		shortname := ""
-		hasShortName := false
-		hasLongName := false
 
-		for _, row := range lippukunnat.Values {
+		for _, row := range keywords.Values {
 
 			fullname = row[0].(string)
 			if len(row) > 1 {
 				shortname = row[1].(string)
 			}
 
-			if len(fullname) > 1 {
-				hasLongName = strings.Contains(strings.ToLower(message), strings.ToLower(fullname))
-			}
-
-			if len(shortname) > 1 {
-				hasShortName = strings.Contains(strings.ToLower(message), strings.ToLower(shortname+" "))
-			}
-
-			if len(shortname) > 1 {
-				hasShortName = strings.Contains(strings.ToLower(message), strings.ToLower(" "+shortname))
-			}
-
-			if hasShortName || hasLongName {
+			if len(fullname) > 1 &&
+				strings.Contains(strings.ToLower(message), strings.ToLower(fullname)) {
 				return fullname
 			}
-			hasShortName = false
-			hasLongName = false
+
+			if len(shortname) > 1 {
+				if strings.HasPrefix(strings.ToLower(message), strings.ToLower(shortname+" ")) {
+					return fullname
+				}
+				if strings.HasSuffix(strings.ToLower(message), strings.ToLower(shortname+" ")) {
+					return fullname
+				}
+
+				if strings.Contains(strings.ToLower(message), strings.ToLower(" "+shortname+" ")) {
+					return fullname
+				}
+			}
 		}
 	}
 
