@@ -36,19 +36,22 @@ var reportSpreadsheetID = ""
 var errorMessage = ""
 var noTargetMessage = ""
 var answer = ""
+var readRange = ""
+var writeRange = ""
 
 func handleMessage(w http.ResponseWriter, r *http.Request) {
 
-	if appengine.IsDevAppServer() {
-		token = testtoken
+	if r.PostFormValue("token") == testtoken {
 		slackurl = testSlackurl
 		targetSpreadsheetID = testTargetSheetID
 		reportSpreadsheetID = testReportSheetID
 		errorMessage = testErrorMessage
 		noTargetMessage = testNoTargetMessage
 		answer = testAnswer
+		readRange = testReadRange
+		writeRange = testWriteRange
 
-	} else if r.PostFormValue("token") != team1token {
+	} else if r.PostFormValue("token") == team1token {
 		token = team1token
 		slackurl = team1Slackurl
 		targetSpreadsheetID = team1TargetSheetID
@@ -56,8 +59,10 @@ func handleMessage(w http.ResponseWriter, r *http.Request) {
 		errorMessage = team1ErrorMessage
 		noTargetMessage = team1NoTargetMessage
 		answer = team1Answer
+		readRange = team1ReadRange
+		writeRange = team1WriteRange
 
-	} else if r.PostFormValue("token") != team2token {
+	} else if r.PostFormValue("token") == team2token {
 		token = team2token
 		slackurl = team2Slackurl
 		targetSpreadsheetID = team2TargetSheetID
@@ -65,6 +70,8 @@ func handleMessage(w http.ResponseWriter, r *http.Request) {
 		errorMessage = team2ErrorMessage
 		noTargetMessage = team2NoTargetMessage
 		answer = team2Answer
+		readRange = team2ReadRange
+		writeRange = team2WriteRange
 
 	} else {
 		http.Error(w, "Invalid Slack token.", http.StatusBadRequest)
@@ -147,10 +154,9 @@ func saveDataToSheets(r *http.Request, sender string, message string) string {
 	}
 
 	valueInputOption := "RAW"
-	writeRange := "Sheet1!A1"
 	var vr sheets.ValueRange
 
-	targets, err := srv.Spreadsheets.Values.Get(targetSpreadsheetID, "Sheet1!A2:B").Context(ctx).Do()
+	targets, err := srv.Spreadsheets.Values.Get(targetSpreadsheetID, readRange).Context(ctx).Do()
 
 	if err != nil {
 		log.Errorf(ctx, "Unable to retrieve data from targetsheet. %v", err)
