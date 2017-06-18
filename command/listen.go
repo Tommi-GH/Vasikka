@@ -31,44 +31,42 @@ func init() {
 
 var token = ""
 var slackurl = ""
-var formurl = ""
 var targetSpreadsheetID = ""
 var reportSpreadsheetID = ""
 var errorMessage = ""
 var noTargetMessage = ""
+var answer = ""
 
 func handleMessage(w http.ResponseWriter, r *http.Request) {
 
 	if appengine.IsDevAppServer() {
-		token = tokentest
-		slackurl = ""
-		formurl = ""
-		targetSpreadsheetID = ""
-		reportSpreadsheetID = ""
-		errorMessage = ""
-		noTargetMessage = ""
+		token = testtoken
+		slackurl = testSlackurl
+		targetSpreadsheetID = testTargetSheetID
+		reportSpreadsheetID = testReportSheetID
+		errorMessage = testErrorMessage
+		noTargetMessage = testNoTargetMessage
+		answer = testAnswer
 
-	} else if r.PostFormValue("team_id") == team1ID {
+	} else if r.PostFormValue("token") != team1token {
 		token = team1token
 		slackurl = team1Slackurl
-		formurl = team1Formurl
 		targetSpreadsheetID = team1TargetSheetID
 		reportSpreadsheetID = team1ReportSheetID
 		errorMessage = team1ErrorMessage
 		noTargetMessage = team1NoTargetMessage
+		answer = team1Answer
 
-	} else if r.PostFormValue("team_id") == team2ID {
+	} else if r.PostFormValue("token") != team2token {
 		token = team2token
 		slackurl = team2Slackurl
-		formurl = team2Formurl
 		targetSpreadsheetID = team2TargetSheetID
 		reportSpreadsheetID = team2ReportSheetID
-		team2ErrorMessage = ""
-		team2NoTargetMessage = ""
+		errorMessage = team2ErrorMessage
+		noTargetMessage = team2NoTargetMessage
+		answer = team2Answer
 
-	}
-
-	if token != "" && r.PostFormValue("token") != token {
+	} else {
 		http.Error(w, "Invalid Slack token.", http.StatusBadRequest)
 		return
 	}
@@ -200,10 +198,9 @@ func parseKeywords(message string, keywords *sheets.ValueRange) string {
 				if strings.HasPrefix(strings.ToLower(message), strings.ToLower(shortname+" ")) {
 					return fullname
 				}
-				if strings.HasSuffix(strings.ToLower(message), strings.ToLower(shortname+" ")) {
+				if strings.HasSuffix(strings.ToLower(message), strings.ToLower(" "+shortname)) {
 					return fullname
 				}
-
 				if strings.Contains(strings.ToLower(message), strings.ToLower(" "+shortname+" ")) {
 					return fullname
 				}
