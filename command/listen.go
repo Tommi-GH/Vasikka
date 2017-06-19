@@ -26,7 +26,8 @@ type slashResponse struct {
 }
 
 type teamInfo struct {
-	Slackurl            string
+	PrivateSlackurl     string
+	PublicSlackurl      string `text:"omitempty"`
 	TargetSpreadsheetID string
 	ReportSpreadsheetID string
 	ErrorMessage        string
@@ -34,6 +35,8 @@ type teamInfo struct {
 	Answer              string
 	ReadRange           string
 	WriteRange          string
+	NoPostKey           string
+	HelpText            string
 }
 
 var team teamInfo
@@ -46,7 +49,7 @@ func handleMessage(w http.ResponseWriter, r *http.Request) {
 
 	team = getTeamInfo(r.PostFormValue("token"))
 
-	if len(team.Slackurl) == 0 {
+	if len(team.PublicSlackurl) == 0 {
 		http.Error(w, "Invalid Slack token.", http.StatusBadRequest)
 		return
 	}
@@ -65,14 +68,21 @@ func handleMessage(w http.ResponseWriter, r *http.Request) {
 	var attJSON = att
 	var resp = &slashResponse{}
 
-	if saveDataToSheets(r, sender, message) == "" {
+	if strings.EqualFold(strings.ToLower(message), "-help") {
+		resp = &slashResponse{
+			ResponseType: "ephemeral",
+			Text:         team.HelpText,
+		}
+	} else if saveDataToSheets(r, sender, message) == "" {
 		resp = &slashResponse{
 			ResponseType: "ephemeral",
 			Text:         "Kiitos " + sender + "! " + team.Answer,
 			Attachments:  []*attachments{attJSON},
 		}
-		sendSlackMsg(message, r)
 
+		if !strings.Contains(message, team.NoPostKey) {
+			sendSlackMsg(message, r, true)
+		}
 	} else if saveDataToSheets(r, sender, message) == "noTarget" {
 		resp = &slashResponse{
 			ResponseType: "ephemeral",
@@ -89,21 +99,25 @@ func handleMessage(w http.ResponseWriter, r *http.Request) {
 
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		log.Errorf(c, "Error encoding JSON: %s", err)
-		return
 	}
-
-	print(json.NewEncoder(w).Encode(resp))
 
 }
 
 // Send Slack message to dedicated channel as bot user
-func sendSlackMsg(message string, r *http.Request) {
+func sendSlackMsg(message string, r *http.Request, public bool) {
 
 	payload := strings.NewReader("{\"text\":\"" + message + "\"}")
 
 	ctx := appengine.NewContext(r)
 	client := urlfetch.Client(ctx)
-	req, _ := http.NewRequest("POST", team.Slackurl, payload)
+
+	/*if public {
+		req, _ := http.NewRequest("POST", team.PublicSlackurl, payload)
+	} else {
+		req, _ := http.NewRequest("POST", team.PrivateSlackurl, payload)
+	}*/
+
+	req, _ := http.NewRequest("POST", team.PublicSlackurl, payload)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp2, err := client.Do(req)
@@ -146,7 +160,10 @@ func saveDataToSheets(r *http.Request, sender string, message string) string {
 		return "noTarget"
 	}
 
-	myval := []interface{}{time.Now(), target, message, sender}
+	layout := "01/02/2006 15:04:05"
+	timestamp := time.Now().Format(layout)
+
+	myval := []interface{}{timestamp, target, message, sender}
 	vr.Values = append(vr.Values, myval)
 
 	_, err = srv.Spreadsheets.Values.Append(team.ReportSpreadsheetID, team.WriteRange, &vr).ValueInputOption(valueInputOption).Context(ctx).Do()
