@@ -25,10 +25,6 @@ type slashResponse struct {
 	Attachments  []*attachments `json:"attachments"`
 }
 
-func init() {
-	http.HandleFunc("/", handleMessage)
-}
-
 type teamInfo struct {
 	Slackurl            string
 	TargetSpreadsheetID string
@@ -41,6 +37,10 @@ type teamInfo struct {
 }
 
 var team teamInfo
+
+func init() {
+	http.HandleFunc("/", handleMessage)
+}
 
 func handleMessage(w http.ResponseWriter, r *http.Request) {
 
