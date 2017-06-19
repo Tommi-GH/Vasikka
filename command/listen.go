@@ -29,51 +29,24 @@ func init() {
 	http.HandleFunc("/", handleMessage)
 }
 
-var token = ""
-var slackurl = ""
-var targetSpreadsheetID = ""
-var reportSpreadsheetID = ""
-var errorMessage = ""
-var noTargetMessage = ""
-var answer = ""
-var readRange = ""
-var writeRange = ""
+type teamInfo struct {
+	Slackurl            string
+	TargetSpreadsheetID string
+	ReportSpreadsheetID string
+	ErrorMessage        string
+	NoTargetMessage     string
+	Answer              string
+	ReadRange           string
+	WriteRange          string
+}
+
+var team teamInfo
 
 func handleMessage(w http.ResponseWriter, r *http.Request) {
 
-	if r.PostFormValue("token") == testtoken {
-		slackurl = testSlackurl
-		targetSpreadsheetID = testTargetSheetID
-		reportSpreadsheetID = testReportSheetID
-		errorMessage = testErrorMessage
-		noTargetMessage = testNoTargetMessage
-		answer = testAnswer
-		readRange = testReadRange
-		writeRange = testWriteRange
+	team = getTeamInfo(r.PostFormValue("token"))
 
-	} else if r.PostFormValue("token") == team1token {
-		token = team1token
-		slackurl = team1Slackurl
-		targetSpreadsheetID = team1TargetSheetID
-		reportSpreadsheetID = team1ReportSheetID
-		errorMessage = team1ErrorMessage
-		noTargetMessage = team1NoTargetMessage
-		answer = team1Answer
-		readRange = team1ReadRange
-		writeRange = team1WriteRange
-
-	} else if r.PostFormValue("token") == team2token {
-		token = team2token
-		slackurl = team2Slackurl
-		targetSpreadsheetID = team2TargetSheetID
-		reportSpreadsheetID = team2ReportSheetID
-		errorMessage = team2ErrorMessage
-		noTargetMessage = team2NoTargetMessage
-		answer = team2Answer
-		readRange = team2ReadRange
-		writeRange = team2WriteRange
-
-	} else {
+	if len(team.Slackurl) == 0 {
 		http.Error(w, "Invalid Slack token.", http.StatusBadRequest)
 		return
 	}
@@ -95,7 +68,7 @@ func handleMessage(w http.ResponseWriter, r *http.Request) {
 	if saveDataToSheets(r, sender, message) == "" {
 		resp = &slashResponse{
 			ResponseType: "ephemeral",
-			Text:         "Kiitos " + sender + "! " + answer,
+			Text:         "Kiitos " + sender + "! " + team.Answer,
 			Attachments:  []*attachments{attJSON},
 		}
 		sendSlackMsg(message, r)
@@ -103,13 +76,13 @@ func handleMessage(w http.ResponseWriter, r *http.Request) {
 	} else if saveDataToSheets(r, sender, message) == "noTarget" {
 		resp = &slashResponse{
 			ResponseType: "ephemeral",
-			Text:         noTargetMessage,
+			Text:         team.NoTargetMessage,
 			Attachments:  []*attachments{attJSON},
 		}
 	} else {
 		resp = &slashResponse{
 			ResponseType: "ephemeral",
-			Text:         errorMessage,
+			Text:         team.ErrorMessage,
 			Attachments:  []*attachments{attJSON},
 		}
 	}
@@ -130,7 +103,7 @@ func sendSlackMsg(message string, r *http.Request) {
 
 	ctx := appengine.NewContext(r)
 	client := urlfetch.Client(ctx)
-	req, _ := http.NewRequest("POST", slackurl, payload)
+	req, _ := http.NewRequest("POST", team.Slackurl, payload)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp2, err := client.Do(req)
@@ -161,7 +134,7 @@ func saveDataToSheets(r *http.Request, sender string, message string) string {
 	valueInputOption := "RAW"
 	var vr sheets.ValueRange
 
-	targets, err := srv.Spreadsheets.Values.Get(targetSpreadsheetID, readRange).Context(ctx).Do()
+	targets, err := srv.Spreadsheets.Values.Get(team.TargetSpreadsheetID, team.ReadRange).Context(ctx).Do()
 
 	if err != nil {
 		log.Errorf(ctx, "Unable to retrieve data from targetsheet. %v", err)
@@ -176,9 +149,7 @@ func saveDataToSheets(r *http.Request, sender string, message string) string {
 	myval := []interface{}{time.Now(), target, message, sender}
 	vr.Values = append(vr.Values, myval)
 
-	//properties, err := srv.Spreadsheets.Values.Get(targetSpreadsheetID, sheets.Properties).Context(ctx).Do()
-
-	_, err = srv.Spreadsheets.Values.Append(reportSpreadsheetID, writeRange, &vr).ValueInputOption(valueInputOption).Context(ctx).Do()
+	_, err = srv.Spreadsheets.Values.Append(team.ReportSpreadsheetID, team.WriteRange, &vr).ValueInputOption(valueInputOption).Context(ctx).Do()
 	if err != nil {
 		log.Errorf(ctx, "Unable to retrieve data from reportsheet. %v", err)
 		return "Error"
