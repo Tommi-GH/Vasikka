@@ -98,6 +98,8 @@ func handleMessage(w http.ResponseWriter, r *http.Request) {
 			Text:         "Kiitos " + sender + "! " + answer,
 			Attachments:  []*attachments{attJSON},
 		}
+		sendSlackMsg(message, r)
+
 	} else if saveDataToSheets(r, sender, message) == "noTarget" {
 		resp = &slashResponse{
 			ResponseType: "ephemeral",
@@ -114,13 +116,16 @@ func handleMessage(w http.ResponseWriter, r *http.Request) {
 
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		log.Errorf(c, "Error encoding JSON: %s", err)
-		http.Error(w, "Error encoding JSON.", http.StatusInternalServerError)
 		return
 	}
 
 	print(json.NewEncoder(w).Encode(resp))
 
-	// Send Slack message to dedicated channel as bot user
+}
+
+// Send Slack message to dedicated channel as bot user
+func sendSlackMsg(message string, r *http.Request) {
+
 	payload := strings.NewReader("{\"text\":\"" + message + "\"}")
 
 	ctx := appengine.NewContext(r)
@@ -128,10 +133,10 @@ func handleMessage(w http.ResponseWriter, r *http.Request) {
 	req, _ := http.NewRequest("POST", slackurl, payload)
 	req.Header.Set("Content-Type", "application/json")
 
-	resp2, err2 := client.Do(req)
+	resp2, err := client.Do(req)
 
-	if err2 != nil {
-		log.Errorf(ctx, "Unable to send message as bot user: %s", err2)
+	if err != nil {
+		log.Errorf(ctx, "Unable to send message as bot user: %s", err)
 	}
 
 	defer resp2.Body.Close()
@@ -170,6 +175,8 @@ func saveDataToSheets(r *http.Request, sender string, message string) string {
 
 	myval := []interface{}{time.Now(), target, message, sender}
 	vr.Values = append(vr.Values, myval)
+
+	//properties, err := srv.Spreadsheets.Values.Get(targetSpreadsheetID, sheets.Properties).Context(ctx).Do()
 
 	_, err = srv.Spreadsheets.Values.Append(reportSpreadsheetID, writeRange, &vr).ValueInputOption(valueInputOption).Context(ctx).Do()
 	if err != nil {
