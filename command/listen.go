@@ -308,7 +308,7 @@ func getTargetReports(r *http.Request, message string) string {
 		return team.NoTargetMessage
 	}
 
-	reports := []string{""}
+	var reports = []string{}
 
 	if len(data.Values) > 0 {
 
