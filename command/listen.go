@@ -315,8 +315,8 @@ func getTargetReports(r *http.Request, message string) string {
 		for _, row := range data.Values {
 
 			if strings.EqualFold(target, "all") || strings.EqualFold(strings.ToLower(row[0].(string)), target) {
+				reports = append(reports, row[1].(string)+" Reporter: "+row[2].(string))
 			}
-			reports = append(reports, row[1].(string)+" Reporter: "+row[2].(string))
 		}
 	}
 
