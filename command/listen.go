@@ -97,9 +97,9 @@ func createResponse(r *http.Request, message string) (*slashResponse, bool) {
 		}, false
 	}
 
-	//If the message is -hae, return a list of reports for given target or
-	//all targets if target is "kaikki"
-	if strings.HasPrefix(strings.ToLower(message), "-hae") {
+	//If the message starts with -report, return a list of reports for given
+	//target or all targets if target is "all"
+	if strings.HasPrefix(strings.ToLower(message), "-report") {
 		return &slashResponse{
 			ResponseType: "ephemeral",
 			Text:         getTargetReports(r, message),
@@ -268,7 +268,7 @@ func findTarget(r *http.Request, message string) string {
 
 }
 
-//finds reports on the given target or all reports if target is "kaikki"
+//finds reports on the given target or all reports if target is "all"
 //return all reports formatted into one string
 func getTargetReports(r *http.Request, message string) string {
 
@@ -293,8 +293,13 @@ func getTargetReports(r *http.Request, message string) string {
 
 	target := ""
 
-	if strings.EqualFold(message[strings.Index(message, " "):len(message)], "kaikki") {
-		target = "kaikki"
+	splitMessage := strings.Split(message, " ")
+	if len(splitMessage) > 1 {
+		target = splitMessage[1]
+	}
+
+	if strings.EqualFold(target, "all") {
+		target = "all"
 	} else {
 		target = findTarget(r, message)
 	}
@@ -309,7 +314,7 @@ func getTargetReports(r *http.Request, message string) string {
 
 		for _, row := range data.Values {
 
-			if strings.EqualFold(target, "kaikki") || strings.EqualFold(strings.ToLower(row[0].(string)), target) {
+			if strings.EqualFold(target, "all") || strings.EqualFold(strings.ToLower(row[0].(string)), target) {
 			}
 			reports = append(reports, row[1].(string)+" Reporter: "+row[2].(string))
 		}
