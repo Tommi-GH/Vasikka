@@ -59,7 +59,7 @@ func handleMessage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("content-type", "application/json")
 
 	sender := r.PostFormValue("user_name")
-	message := strings.Replace(r.PostFormValue("text"), `"`, "´´", -1)
+	message := strings.Replace(strings.Replace(r.PostFormValue("text"), `"`, "´´", -1), "\\", "/", -1)
 
 	att := &attachments{
 		Text: message,
@@ -68,24 +68,28 @@ func handleMessage(w http.ResponseWriter, r *http.Request) {
 	var attJSON = att
 	var resp = &slashResponse{}
 
-	saveMessage := saveDataToSheets(r, sender, message)
+	saveMessageResp := saveDataToSheets(r, sender, message)
 
 	if strings.EqualFold(strings.ToLower(message), "-help") {
 		resp = &slashResponse{
 			ResponseType: "ephemeral",
 			Text:         team.HelpText,
 		}
-	} else if saveMessage == "" {
+	} else if strings.HasPrefix(strings.ToLower(message), "-hae") {
+		resp = &slashResponse{
+			ResponseType: "ephemeral",
+			Text:         getTargetReports(r, message),
+		}
+	} else if saveMessageResp == "" {
 		resp = &slashResponse{
 			ResponseType: "ephemeral",
 			Text:         "Kiitos " + sender + "! " + team.Answer,
 			Attachments:  []*attachments{attJSON},
 		}
 
-		if !strings.Contains(message, team.NoPostKey) {
-			sendSlackMsg(message, r, true)
-		}
-	} else if saveMessage == "noTarget" {
+		sendSlackMsg(message, r, true)
+
+	} else if saveMessageResp == "noTarget" {
 		resp = &slashResponse{
 			ResponseType: "ephemeral",
 			Text:         team.NoTargetMessage,
@@ -107,6 +111,10 @@ func handleMessage(w http.ResponseWriter, r *http.Request) {
 
 // Send Slack message to dedicated channel as bot user
 func sendSlackMsg(message string, r *http.Request, public bool) {
+
+	if !strings.Contains(message, team.NoPostKey) {
+		return
+	}
 
 	payload := strings.NewReader("{\"text\":\"" + message + "\"}")
 
@@ -147,11 +155,7 @@ func saveDataToSheets(r *http.Request, sender string, message string) string {
 		return "Error"
 	}
 
-	valueInputOption := "RAW"
-	var vr sheets.ValueRange
-
 	targets, err := srv.Spreadsheets.Values.Get(team.TargetSpreadsheetID, team.ReadRange).Context(ctx).Do()
-
 	if err != nil {
 		log.Errorf(ctx, "Unable to retrieve data from targetsheet. %v", err)
 		return "Error"
@@ -164,6 +168,9 @@ func saveDataToSheets(r *http.Request, sender string, message string) string {
 
 	layout := "01/02/2006 15:04:05"
 	timestamp := time.Now().Format(layout)
+
+	valueInputOption := "RAW"
+	var vr sheets.ValueRange
 
 	myval := []interface{}{timestamp, target, message, sender}
 	vr.Values = append(vr.Values, myval)
@@ -212,4 +219,53 @@ func parseKeywords(message string, keywords *sheets.ValueRange) string {
 	}
 
 	return ""
+}
+
+func getTargetReports(r *http.Request, message string) string {
+
+	ctx := appengine.NewContext(r)
+	client, err := google.DefaultClient(ctx, "https://www.googleapis.com/auth/spreadsheets")
+	if err != nil {
+		log.Errorf(ctx, "Unable to create client %s", err)
+		return "Error"
+	}
+
+	srv, err := sheets.New(client)
+	if err != nil {
+		log.Errorf(ctx, "Unable to retrieve Sheets Client %v", err)
+		return "Error"
+	}
+
+	data, err := srv.Spreadsheets.Values.Get(team.ReportSpreadsheetID, "B2:D").Context(ctx).Do()
+	if err != nil {
+		log.Errorf(ctx, "Unable to retrieve data from targetsheet. %v", err)
+		return "Error"
+	}
+
+	target := strings.ToLower(message[strings.Index(message, " "):len(message)])
+	reports := []string{""}
+
+	if len(data.Values) > 0 {
+
+		for _, row := range data.Values {
+
+			if strings.EqualFold(strings.ToLower(row[0].(string)), target) {
+			}
+			reports = append(reports, row[1].(string)+" Reporter: "+row[2].(string))
+		}
+	}
+
+	if len(reports) == 0 {
+		return "No reports found"
+	}
+
+	targetReports := "Reports for target" + target + "\n"
+
+	for _, report := range reports {
+
+		targetReports = targetReports + report + "\n"
+
+	}
+
+	return targetReports
 }
