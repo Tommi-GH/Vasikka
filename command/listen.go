@@ -68,12 +68,14 @@ func handleMessage(w http.ResponseWriter, r *http.Request) {
 	var attJSON = att
 	var resp = &slashResponse{}
 
+	saveMessage := saveDataToSheets(r, sender, message)
+
 	if strings.EqualFold(strings.ToLower(message), "-help") {
 		resp = &slashResponse{
 			ResponseType: "ephemeral",
 			Text:         team.HelpText,
 		}
-	} else if saveDataToSheets(r, sender, message) == "" {
+	} else if saveMessage == "" {
 		resp = &slashResponse{
 			ResponseType: "ephemeral",
 			Text:         "Kiitos " + sender + "! " + team.Answer,
@@ -83,7 +85,7 @@ func handleMessage(w http.ResponseWriter, r *http.Request) {
 		if !strings.Contains(message, team.NoPostKey) {
 			sendSlackMsg(message, r, true)
 		}
-	} else if saveDataToSheets(r, sender, message) == "noTarget" {
+	} else if saveMessage == "noTarget" {
 		resp = &slashResponse{
 			ResponseType: "ephemeral",
 			Text:         team.NoTargetMessage,
