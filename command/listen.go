@@ -94,6 +94,9 @@ func createResponse(r *http.Request, message string) (*slashResponse, bool) {
 		return &slashResponse{
 			ResponseType: "ephemeral",
 			Text:         team.HelpText,
+			Attachments: []*attachments{&attachments{
+				Text: message,
+			}},
 		}, false
 	}
 
@@ -103,6 +106,9 @@ func createResponse(r *http.Request, message string) (*slashResponse, bool) {
 		return &slashResponse{
 			ResponseType: "ephemeral",
 			Text:         getTargetReports(r, message),
+			Attachments: []*attachments{&attachments{
+				Text: message,
+			}},
 		}, false
 	}
 
