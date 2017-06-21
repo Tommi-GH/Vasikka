@@ -43,6 +43,7 @@ type teamInfo struct {
 	WriteRange          string
 	NoPostKey           string
 	HelpText            string
+	AnswerPrefix        string
 }
 
 var team teamInfo
@@ -94,9 +95,6 @@ func createResponse(r *http.Request, message string) (*slashResponse, bool) {
 		return &slashResponse{
 			ResponseType: "ephemeral",
 			Text:         team.HelpText,
-			Attachments: []*attachments{&attachments{
-				Text: message,
-			}},
 		}, false
 	}
 
@@ -107,7 +105,7 @@ func createResponse(r *http.Request, message string) (*slashResponse, bool) {
 			ResponseType: "ephemeral",
 			Text:         getTargetReports(r, message),
 			Attachments: []*attachments{&attachments{
-				Text: message,
+				Text: "Report query: " + message,
 			}},
 		}, false
 	}
@@ -131,7 +129,7 @@ func createResponse(r *http.Request, message string) (*slashResponse, bool) {
 
 		return &slashResponse{
 			ResponseType: "ephemeral",
-			Text:         "Kiitos " + r.PostFormValue("user_name") + "! " + team.Answer,
+			Text:         team.AnswerPrefix + r.PostFormValue("user_name") + "! " + team.Answer,
 			Attachments: []*attachments{&attachments{
 				Text: message,
 			}},
