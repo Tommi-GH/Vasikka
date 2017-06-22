@@ -43,7 +43,7 @@ type teamInfo struct {
 	WriteRange          string
 	NoPostKey           string
 	HelpText            string
-	AnswerPrefix        string
+	AnswerPrefix        string `text:"omitempty"`
 }
 
 var team teamInfo
@@ -289,7 +289,7 @@ func getTargetReports(r *http.Request, message string) string {
 		return "Error"
 	}
 
-	data, err := srv.Spreadsheets.Values.Get(team.ReportSpreadsheetID, "B2:D").Context(ctx).Do()
+	data, err := srv.Spreadsheets.Values.Get(team.ReportSpreadsheetID, team.WriteRange).Context(ctx).Do()
 	if err != nil {
 		log.Errorf(ctx, "Unable to retrieve data from targetsheet. %v", err)
 		return "Error"
@@ -318,8 +318,8 @@ func getTargetReports(r *http.Request, message string) string {
 
 		for _, row := range data.Values {
 
-			if strings.EqualFold(target, "all") || strings.EqualFold(strings.ToLower(row[0].(string)), target) {
-				reports = append(reports, row[1].(string)+" Reporter: "+row[2].(string))
+			if strings.EqualFold(target, "all") || strings.EqualFold(strings.ToLower(row[1].(string)), target) {
+				reports = append(reports, row[2].(string)+" Reporter: "+row[3].(string))
 			}
 		}
 	}
