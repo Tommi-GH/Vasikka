@@ -6,6 +6,7 @@ package listener
 
 import (
 	"encoding/json"
+	"html/template"
 	"net/http"
 	"time"
 
@@ -47,10 +48,19 @@ type teamInfo struct {
 }
 
 var team teamInfo
+var indexTmpl = template.Must(template.ParseFiles("index.html"))
 
 //Direct the request
 func init() {
 	http.HandleFunc("/", handleMessage)
+	http.HandleFunc("/index.html", handleIndex)
+}
+
+func handleIndex(w http.ResponseWriter, r *http.Request) {
+	if err := indexTmpl.Execute(w, nil); err != nil {
+		c := appengine.NewContext(r)
+		log.Errorf(c, "Error executing indexTmpl template: %s", err)
+	}
 }
 
 //the main function for POST-request handling
