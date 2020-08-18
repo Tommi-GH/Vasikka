@@ -1,13 +1,11 @@
-//Package for listening slack slashcommands, checking the data for
-//keywords (targets) listed in google sheet, saving the data to
-//another google sheet and responding to the request. Also provides
-//instructions of use and reporting of saved data per target or all
-package listener
+package main
 
 import (
 	"encoding/json"
 	"html/template"
+	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"golang.org/x/oauth2/google"
@@ -15,9 +13,6 @@ import (
 	"strings"
 
 	sheets "google.golang.org/api/sheets/v4"
-	"google.golang.org/appengine"
-	"google.golang.org/appengine/log"
-	"google.golang.org/appengine/urlfetch"
 )
 
 type attachments struct {
@@ -50,33 +45,46 @@ type teamInfo struct {
 var team teamInfo
 var indexTmpl = template.Must(template.ParseFiles("index.html"))
 
-//Direct the request
-func init() {
+func main() {
 	http.HandleFunc("/", handleMessage)
 	http.HandleFunc("/index.html", handleIndex)
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+		log.Printf("Defaulting to port %s", port)
+	}
+
+	//log.Infof("Listening on port %s", port)
+	if err := http.ListenAndServe(":"+port, nil); err != nil {
+		log.Fatal(err)
+	}
 }
 
 func handleIndex(w http.ResponseWriter, r *http.Request) {
 	if err := indexTmpl.Execute(w, nil); err != nil {
-		c := appengine.NewContext(r)
-		log.Errorf(c, "Error executing indexTmpl template: %s", err)
+		c := r.Context()
+		log.Fatal(c, "Error executing indexTmpl template: %s", err)
 	}
 }
 
 //the main function for POST-request handling
 func handleMessage(w http.ResponseWriter, r *http.Request) {
 
-	team = getTeamInfo(r.PostFormValue("token"))
+	log.Printf("A new request!")
+	token := r.PostFormValue("token")
+	team = getTeamInfo(token)
 
 	//if team info is not found, the token is invalid
 	//team info is in a map-object in the configuration file
 	//with token as key
 	if len(team.PublicSlackurl) == 0 {
 		http.Error(w, "Invalid Slack token.", http.StatusBadRequest)
+		log.Printf("Invalid Slack token")
 		return
 	}
 
-	ctx := appengine.NewContext(r)
+	ctx := r.Context()
 	w.Header().Set("content-type", "application/json")
 
 	//escape problematic characters
@@ -92,7 +100,7 @@ func handleMessage(w http.ResponseWriter, r *http.Request) {
 
 	err := json.NewEncoder(w).Encode(resp)
 	if err != nil {
-		log.Errorf(ctx, "Error encoding JSON: %s", err)
+		log.Fatal(ctx, "Error encoding JSON: %s", err)
 	}
 }
 
@@ -165,8 +173,8 @@ func sendSlackMsg(message string, r *http.Request, public bool) {
 
 	payload := strings.NewReader("{\"text\":\"" + message + "\"}")
 
-	ctx := appengine.NewContext(r)
-	client := urlfetch.Client(ctx)
+	ctx := r.Context()
+	client := &http.Client{}
 
 	//for separate channels depending on keywords in message, not in use currently
 	/*if public {
@@ -181,7 +189,7 @@ func sendSlackMsg(message string, r *http.Request, public bool) {
 	_, err := client.Do(req)
 
 	if err != nil {
-		log.Errorf(ctx, "Unable to send message as bot user: %s", err)
+		log.Fatal(ctx, "Unable to send message as bot user: %s", err)
 	}
 
 }
@@ -189,16 +197,16 @@ func sendSlackMsg(message string, r *http.Request, public bool) {
 //Writes timestamp, target name, message and sender name to team-specific Google sheet
 func saveDataToSheets(r *http.Request, message string) string {
 
-	ctx := appengine.NewContext(r)
+	ctx := r.Context()
 	client, err := google.DefaultClient(ctx, "https://www.googleapis.com/auth/spreadsheets")
 	if err != nil {
-		log.Errorf(ctx, "Unable to create client %s", err)
+		log.Fatal(ctx, "Unable to create client %s", err)
 		return "Error"
 	}
 
 	srv, err := sheets.New(client)
 	if err != nil {
-		log.Errorf(ctx, "Unable to retrieve Sheets Client %v", err)
+		log.Fatal(ctx, "Unable to retrieve Sheets Client %v", err)
 		return "Error"
 	}
 
@@ -215,7 +223,7 @@ func saveDataToSheets(r *http.Request, message string) string {
 
 	_, err = srv.Spreadsheets.Values.Append(team.ReportSpreadsheetID, team.WriteRange, &vr).ValueInputOption(valueInputOption).Context(ctx).Do()
 	if err != nil {
-		log.Errorf(ctx, "Unable to retrieve data from reportsheet. %v", err)
+		log.Fatal(ctx, "Unable to retrieve data from reportsheet. %v", err)
 		return "Error"
 	}
 
@@ -228,22 +236,22 @@ func saveDataToSheets(r *http.Request, message string) string {
 //if there's an error reading the target list
 func findTarget(r *http.Request, message string) string {
 
-	ctx := appengine.NewContext(r)
+	ctx := r.Context()
 	client, err := google.DefaultClient(ctx, "https://www.googleapis.com/auth/spreadsheets")
 	if err != nil {
-		log.Errorf(ctx, "Unable to create client %s", err)
+		log.Fatal(ctx, "Unable to create client %s", err)
 		return ""
 	}
 
 	srv, err := sheets.New(client)
 	if err != nil {
-		log.Errorf(ctx, "Unable to retrieve Sheets Client %v", err)
+		log.Fatal(ctx, "Unable to retrieve Sheets Client %v", err)
 		return ""
 	}
 
 	targets, err := srv.Spreadsheets.Values.Get(team.TargetSpreadsheetID, team.ReadRange).Context(ctx).Do()
 	if err != nil {
-		log.Errorf(ctx, "Unable to retrieve data from targetsheet. %v", err)
+		log.Fatal(ctx, "Unable to retrieve data from targetsheet. %v", err)
 		return ""
 	}
 
@@ -286,22 +294,22 @@ func findTarget(r *http.Request, message string) string {
 //return all reports formatted into one string
 func getTargetReports(r *http.Request, message string) string {
 
-	ctx := appengine.NewContext(r)
+	ctx := r.Context()
 	client, err := google.DefaultClient(ctx, "https://www.googleapis.com/auth/spreadsheets")
 	if err != nil {
-		log.Errorf(ctx, "Unable to create client %s", err)
+		log.Fatal(ctx, "Unable to create client %s", err)
 		return "Error"
 	}
 
 	srv, err := sheets.New(client)
 	if err != nil {
-		log.Errorf(ctx, "Unable to retrieve Sheets Client %v", err)
+		log.Fatal(ctx, "Unable to retrieve Sheets Client %v", err)
 		return "Error"
 	}
 
 	data, err := srv.Spreadsheets.Values.Get(team.ReportSpreadsheetID, team.WriteRange).Context(ctx).Do()
 	if err != nil {
-		log.Errorf(ctx, "Unable to retrieve data from targetsheet. %v", err)
+		log.Fatal(ctx, "Unable to retrieve data from targetsheet. %v", err)
 		return "Error"
 	}
 

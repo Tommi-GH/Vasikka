@@ -1,4 +1,4 @@
-package listener
+package main
 
 //Teaminformation
 var exampleTeam = teamInfo{
